@@ -10,9 +10,9 @@ The system dynamically routes questions between:
 
 ## 🛠️ Step-by-Step Setup Procedure
 
-### 1. Download and Start Ollama
+### 1. Install and Start Ollama
 1. Download **Ollama** for macOS/Windows/Linux from [ollama.com](https://ollama.com).
-2. Install and launch the application.
+2. Install and launch the application. Ensure the Ollama icon is visible in your menu bar (macOS) or system tray.
 3. Open your terminal and download the **Llama 3** model:
    ```bash
    ollama pull llama3
@@ -53,6 +53,14 @@ Before launching the agent workflow, run the sanity check to confirm your local 
 python sanity_check.py
 ```
 
+**Expected Output:**
+```text
+🔄 Connecting to local Llama3 model via Ollama...
+
+✅ Success! Your local AI brain is online.
+🤖 AI Response: [Confirmation response from Llama3]
+```
+
 ### 2. Run the Multi-Agent System
 Run the main system to execute test cases for both the web search and local RAG agents:
 
@@ -60,7 +68,49 @@ Run the main system to execute test cases for both the web search and local RAG 
 python agent_system.py
 ```
 
-### How it Works under the Hood:
+**Expected Output:**
+```text
+=============================================
+🚀 RUNNING FULL LANGGRAPH MULTI-AGENT SYSTEM
+=============================================
+
+--- 📝 Test Case 1: Requesting Live Web Data ---
+🧠 Supervisor is analyzing the request...
+🎯 Router Decision: Directed to -> search
+🌐 Web Search Agent is activating...
+🔍 Searching the live web for: 'Who won the latest Super Bowl and what was the score?'...
+🤖 Final Graph Response (Web Search):
+[Synthesized answer with Super Bowl score]
+
+--- 📝 Test Case 2: Requesting Document Data ---
+🧠 Supervisor is analyzing the request...
+🎯 Router Decision: Directed to -> search (or rag)
+...
+```
+
+---
+
+## 🔍 Troubleshooting & Common Issues
+
+### 1. Connection Failed Error
+* **Error**: `❌ Connection Failed. Error Details: ...`
+* **Fix**: Ensure the Ollama app is open and running in your Mac's menu bar or system tray.
+
+### 2. Model Not Found (404)
+* **Error**: `model 'llama3' not found (status code: 404)`
+* **Fix**: Run `ollama pull llama3` in your terminal to download the model weights locally.
+
+### 3. Missing Integration / Import Errors
+* **Error**: `ImportError: cannot import name 'ChatOllama' from 'langchain_community.chat_models'`
+* **Fix**: Make sure you have installed `langchain-ollama` and are importing via `from langchain_ollama import ChatOllama`.
+* **Error**: `ImportError: Could not import chromadb`
+* **Fix**: Run `pip install chromadb` inside your active virtual environment.
+* **Error**: `ImportError: Could not import ddgs`
+* **Fix**: Run `pip install ddgs` inside your active virtual environment.
+
+---
+
+## 🏗️ Architecture Under the Hood
 - **StateGraph**: LangGraph manages the shared agent state (`messages` and `next_step`).
 - **Supervisor Router**: Classifies the query (`search` or `rag`) using Llama 3.
 - **Web Search Node**: Activates the DuckDuckGo Search tool to fetch raw internet results.
