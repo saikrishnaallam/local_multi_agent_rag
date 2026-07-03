@@ -90,6 +90,17 @@ python agent_system.py
 
 ---
 
+## 🧠 Routing Behavior (Search vs RAG)
+
+The **Supervisor Router** uses a prompt-based classification logic to decide where to send queries:
+- **Web Search (`search`)**: Triggered for general knowledge, current events, or live web info (e.g., *"Who won the latest Super Bowl and what was the score?"*).
+- **Document RAG (`rag`)**: To trigger the RAG agent, the prompt instructions require the query to explicitly refer to **uploaded files, documents, essays, or notes** (e.g., *"Based on the uploaded project overview document, what database engine does Project Alpha use?"*). 
+
+> [!NOTE]
+> If a query is generic (e.g., *"What database engine does Project Alpha use?"*), the local router will likely classify it as **search** because it is framed as general knowledge rather than a document-specific query.
+
+---
+
 ## 🔍 Troubleshooting & Common Issues
 
 ### 1. Connection Failed Error
