@@ -6,6 +6,32 @@ The system dynamically routes questions between:
 1. **Live Web Search Agent**: Queries DuckDuckGo for current events/general knowledge.
 2. **Local RAG Agent**: Queries a local, in-memory vector database (ChromaDB) for document-specific questions.
 
+## 📊 System Architecture Flowchart
+
+```mermaid
+flowchart TD
+    Start([User Question]) --> Router[🧠 Supervisor Router]
+    Router -->|search| WebSearch[🌐 Web Search Agent]
+    Router -->|rag| LocalRAG[📄 Local RAG Agent]
+    
+    WebSearch --> DDG[🔍 DuckDuckGo API]
+    DDG --> WebSynth[🤖 Llama3 Synthesis]
+    
+    LocalRAG --> Chroma[📦 Chroma DB Lookup]
+    Chroma --> RAGSynth[🤖 Llama3/Chroma Context Synthesis]
+    
+    WebSynth --> End([Final Response])
+    RAGSynth --> End
+    
+    classDef agent fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef tool fill:#bbf,stroke:#333,stroke-width:1px;
+    classDef io fill:#bfb,stroke:#333,stroke-width:1px;
+    
+    class Router,WebSearch,LocalRAG agent;
+    class DDG,Chroma tool;
+    class Start,End io;
+```
+
 ---
 
 ## 🛠️ Step-by-Step Setup Procedure
