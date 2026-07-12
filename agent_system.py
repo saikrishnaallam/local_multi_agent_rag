@@ -176,7 +176,7 @@ if __name__ == "__main__":
     
     # --- TEST CASE 2: Testing the Local RAG Branch ---
     print("--- 📝 Test Case 2: Requesting Document Data ---")
-    query_2 = "What database engine does Project Alpha use?"
+    query_2 = "Based on the uploaded project document, what database engine does Project Alpha use?"
     inputs_2 = {"messages": [HumanMessage(content=query_2)]}
     
     # Run the compiled LangGraph application again!

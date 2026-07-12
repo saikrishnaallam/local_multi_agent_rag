@@ -110,8 +110,13 @@ python agent_system.py
 
 --- 📝 Test Case 2: Requesting Document Data ---
 🧠 Supervisor is analyzing the request...
-🎯 Router Decision: Directed to -> search (or rag)
-...
+🎯 Router Decision: Directed to -> rag
+📄 Local RAG Agent is activating...
+🔎 Querying local vector database for: 'Based on the uploaded project document, what database engine does Project Alpha use?'...
+🤖 Local model is generating a response based on document data...
+
+🤖 Final Graph Response (Local RAG):
+Based on the provided document context, Project Alpha uses PostgreSQL version 15 as its primary database engine.
 ```
 
 ---
@@ -142,8 +147,8 @@ The **Supervisor Router** uses a prompt-based classification logic to decide whe
 * **Fix**: Make sure you have installed `langchain-ollama` and are importing via `from langchain_ollama import ChatOllama`.
 * **Error**: `ImportError: Could not import chromadb`
 * **Fix**: Run `pip install chromadb` inside your active virtual environment.
-* **Error**: `ImportError: Could not import ddgs`
-* **Fix**: Run `pip install ddgs` inside your active virtual environment.
+* **Error**: `ImportError: Could not import duckduckgo_search`
+* **Fix**: Run `pip install duckduckgo-search` inside your active virtual environment.
 
 ---
 
