@@ -48,11 +48,14 @@ flowchart TD
    ollama list
    ```
 
+> [!TIP]
+> You can also run other local models (e.g., `llama3.1`, `llama3.2`, or `mistral`) by pulling them via Ollama (`ollama pull <model-name>`) and updating the model parameter in `sanity_check.py` and `agent_system.py`.
+
 ### 2. Configure the Python Virtual Environment
-Clone the repository, navigate into the directory, and set up your virtual environment:
+Clone the repository, navigate into the directory (if you are not already in it), and set up your virtual environment:
 
 ```bash
-# Navigate to project directory
+# Navigate to project directory (if needed)
 cd local_multi_agent_rag
 
 # Create virtual environment
@@ -156,4 +159,4 @@ The **Supervisor Router** uses a prompt-based classification logic to decide whe
 - **StateGraph**: LangGraph manages the shared agent state (`messages` and `next_step`).
 - **Supervisor Router**: Classifies the query (`search` or `rag`) using Llama 3.
 - **Web Search Node**: Activates the DuckDuckGo Search tool to fetch raw internet results.
-- **Local RAG Node**: Splits and embeds a mock study guide using `OllamaEmbeddings`, indexes it into Chroma, retrieves context, and answers the query.
+- **Local RAG Node**: Splits and embeds a mock project overview document (`project_alpha_guide.pdf`) using `OllamaEmbeddings`, indexes it into Chroma, retrieves context, and answers the query.
