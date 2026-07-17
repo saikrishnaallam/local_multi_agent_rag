@@ -52,10 +52,13 @@ flowchart TD
 > You can also run other local models (e.g., `llama3.1`, `llama3.2`, or `mistral`) by pulling them via Ollama (`ollama pull <model-name>`) and updating the model parameter in `sanity_check.py` and `agent_system.py`.
 
 ### 2. Configure the Python Virtual Environment
-Clone the repository, navigate into the directory (if you are not already in it), and set up your virtual environment:
+Clone the repository, navigate into the directory, and set up your virtual environment:
 
 ```bash
-# Navigate to project directory (if needed)
+# Clone the repository
+git clone https://github.com/saikrishnaallam/local_multi_agent_rag.git
+
+# Navigate to project directory
 cd local_multi_agent_rag
 
 # Create virtual environment
@@ -160,3 +163,11 @@ The **Supervisor Router** uses a prompt-based classification logic to decide whe
 - **Supervisor Router**: Classifies the query (`search` or `rag`) using Llama 3.
 - **Web Search Node**: Activates the DuckDuckGo Search tool to fetch raw internet results.
 - **Local RAG Node**: Splits and embeds a mock project overview document (`project_alpha_guide.pdf`) using `OllamaEmbeddings`, indexes it into Chroma, retrieves context, and answers the query.
+
+---
+
+## 📂 Project Structure
+
+- [agent_system.py](file:///Users/saikrishnaallam/Desktop/local_multi_agent_rag/agent_system.py): The main multi-agent implementation using LangGraph, including the Supervisor Router, Web Search Agent, and Local RAG Agent nodes.
+- [sanity_check.py](file:///Users/saikrishnaallam/Desktop/local_multi_agent_rag/sanity_check.py): A quick validation script to verify local connectivity to Ollama and check if the Llama 3 model is running.
+- [requirements.txt](file:///Users/saikrishnaallam/Desktop/local_multi_agent_rag/requirements.txt): Defines Python package dependencies required to run the agents.
