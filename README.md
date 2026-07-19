@@ -90,7 +90,7 @@ python sanity_check.py
 🔄 Connecting to local Llama3 model via Ollama...
 
 ✅ Success! Your local AI brain is online.
-🤖 AI Response: [Confirmation response from Llama3]
+🤖 AI Response: Hello! I can confirm that I am running locally via Ollama on your machine.
 ```
 
 ### 2. Run the Multi-Agent System
