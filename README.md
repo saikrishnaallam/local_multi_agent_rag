@@ -100,6 +100,12 @@ Run the main system to execute test cases for both the web search and local RAG 
 python agent_system.py
 ```
 
+> [!TIP]
+> If you wish to run the agent system without Python/LangChain deprecation warnings cluttering the terminal, you can ignore them by running:
+> ```bash
+> python -W ignore agent_system.py
+> ```
+
 **Expected Output:**
 ```text
 =============================================
@@ -135,6 +141,20 @@ The **Supervisor Router** uses a prompt-based classification logic to decide whe
 
 > [!NOTE]
 > If a query is generic (e.g., *"What database engine does Project Alpha use?"*), the local router will likely classify it as **search** because it is framed as general knowledge rather than a document-specific query.
+
+### 📄 Seeded Mock Document Context
+The local RAG vector database is pre-seeded with details about a mock project overview (`project_alpha_guide.pdf`). It contains the following facts:
+* **Project Name**: Project Alpha
+* **Primary Database**: PostgreSQL version 15
+* **Session Cache**: Redis (latency under 15ms)
+* **Project Lead**: Sarah Jenkins
+* **Deployment Schedule**: Q4 2026
+
+#### Additional RAG Queries to Test:
+You can verify the retrieval capability by running other queries against the RAG system, such as:
+* *"Based on the uploaded project overview document, who is the project lead for Project Alpha?"*
+* *"Based on the uploaded guide, what is the deployment schedule for Project Alpha?"*
+* *"According to the uploaded documents, what cache database is used and what is its latency?"*
 
 ---
 
