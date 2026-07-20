@@ -59,6 +59,8 @@ cd local_multi_agent_rag
 ```
 
 ### 3. Configure the Python Virtual Environment
+*(Recommended Python Version: 3.9, 3.10, or 3.11)*
+
 Set up your python virtual environment and install the required dependencies:
 ```bash
 # Create virtual environment
@@ -158,6 +160,23 @@ You can verify the retrieval capability by running other queries against the RAG
 
 ---
 
+## 🛠️ Visualizing & Debugging with LangSmith (Optional)
+
+Since this system uses LangGraph and LangChain, you can easily trace the agent steps, supervisor routing decisions, and RAG document retrievals in a beautiful visual UI using **LangSmith**.
+
+To enable tracing:
+1. Sign up for a free account at [smith.langchain.com](https://smith.langchain.com).
+2. Generate an API key from your profile settings.
+3. Export the following environment variables in your terminal before running the python scripts:
+   ```bash
+   export LANGCHAIN_TRACING_V2="true"
+   export LANGCHAIN_API_KEY="your-api-key-here"
+   export LANGCHAIN_PROJECT="local-multi-agent-rag"
+   ```
+4. Run the scripts as normal. All executions will automatically be recorded and visualized in your LangSmith dashboard!
+
+---
+
 ## 🔍 Troubleshooting & Common Issues
 
 ### 1. Connection Failed Error
@@ -184,7 +203,7 @@ You can verify the retrieval capability by running other queries against the RAG
 - **StateGraph**: LangGraph manages the shared agent state (`messages` and `next_step`).
 - **Supervisor Router**: Classifies the query (`search` or `rag`) using Llama 3.
 - **Web Search Node**: Activates the DuckDuckGo Search tool to fetch raw internet results.
-- **Local RAG Node**: Splits and embeds a mock project overview document (`project_alpha_guide.pdf`) using `OllamaEmbeddings`, indexes it into Chroma, retrieves context, and answers the query.
+- **Local RAG Node**: Splits and embeds a mock project overview document (`project_alpha_guide.pdf`) using `OllamaEmbeddings`, indexes it into an **in-memory** Chroma instance (re-seeded on every execution), retrieves context, and answers the query.
 
 ---
 
