@@ -212,3 +212,40 @@ To enable tracing:
 - [agent_system.py](agent_system.py): The main multi-agent implementation using LangGraph, including the Supervisor Router, Web Search Agent, and Local RAG Agent nodes.
 - [sanity_check.py](sanity_check.py): A quick validation script to verify local connectivity to Ollama and check if the Llama 3 model is running.
 - [requirements.txt](requirements.txt): Defines Python package dependencies required to run the agents.
+
+---
+
+## 🛠️ Customizing the System & Graph
+
+You can easily extend this multi-agent system to add more capabilities:
+
+### 1. Adding a New Agent/Node
+To add a new agent (e.g., a "Math Agent"):
+1. Define the node function in [agent_system.py](agent_system.py):
+   ```python
+   def math_agent(state: AgentState):
+       # Define math agent logic here
+       return {"messages": [AIMessage(content="Math agent response")]}
+   ```
+2. Register the node in the StateGraph definition:
+   ```python
+   workflow.add_node("math_agent", math_agent)
+   ```
+3. Connect the node output to `END`:
+   ```python
+   workflow.add_edge("math_agent", END)
+   ```
+
+### 2. Updating the Supervisor Router
+Update the supervisor classification prompt inside `supervisor_router()` to define when queries should route to the new agent, and update the output map:
+```python
+workflow.add_conditional_edges(
+    START,
+    supervisor_router,
+    {
+        "search": "web_search",
+        "rag": "local_rag",
+        "math": "math_agent" # New route option
+    }
+)
+```
