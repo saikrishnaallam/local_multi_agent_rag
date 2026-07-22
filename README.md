@@ -197,6 +197,10 @@ To enable tracing:
 * **Error**: `ImportError: Could not import langgraph`
 * **Fix**: Run `pip install langgraph` inside your active virtual environment.
 
+### 4. DuckDuckGo Rate Limiting (HTTP 403 Forbidden)
+* **Error**: `HTTPError: 403 Forbidden` or `RatelimitException` during Web Search execution.
+* **Fix**: DuckDuckGo search can occasionally rate-limit public IP addresses during frequent requests. Wait a few minutes before running again, or integrate a paid API like SerpAPI or Google Search for high-concurrency production workloads.
+
 ---
 
 ## 🏗️ Architecture Under the Hood
