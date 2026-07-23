@@ -1,22 +1,30 @@
-from langgraph.graph import StateGraph, START, END
-from typing import TypedDict, Annotated, Literal
-from langgraph.graph.message import add_messages
+from typing import List, TypedDict, Literal
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from langgraph.graph import END, StateGraph, START
 from langchain_ollama import ChatOllama, OllamaEmbeddings
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_community.vectorstores import Chroma
 import os
 
-# 1. Define the Shared Memory (State)
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    next_step: str
+# --- 1. Define the Graph State ---
+class GraphState(TypedDict):
+    """Represents the state of our graph."""
+    question: str
+    documents: List[str]
+    generation: str
+    route: str  # Added to track step route
 
-# 2. Initialize the Local Brain, Search Tool, and Local Embeddings
-local_llm = ChatOllama(model="llama3", temperature=0)
+# --- 2. Define the Guardrail (Pydantic) ---
+class RouteDecision(BaseModel):
+    """Route the process based on document relevance."""
+    step: Literal["generate", "web_search"] = Field(
+        description="Output 'generate' if documents are relevant to the question. Output 'web_search' if they are irrelevant."
+    )
+
+# Initialize local LLM, Embeddings, Search Tool
+llm = ChatOllama(model="llama3", temperature=0)
 web_search_tool = DuckDuckGoSearchRun()
-
-# Use nomic-embed-text to match the embeddings of ingest.py
 local_embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
 # Connect to the local, persistent Chroma vector database
@@ -28,119 +36,150 @@ else:
     print(f"⚠️ Warning: Directory '{persist_dir}' not found. Please run ingest.py first.")
     vector_db = None
 
-# --- Supervisor Router Node ---
-def supervisor_router(state: AgentState) -> Literal["rag", "search"]:
-    print("\n🧠 Supervisor is analyzing the request...")
-    last_message = state["messages"][-1].content
-    system_prompt = SystemMessage(
-        content=(
-            "You are an expert routing assistant for a multi-agent system.\n"
-            "Analyze the user's query and determine the best source:\n"
-            "- Reply ONLY with the word 'rag' if the user is asking about uploaded files, documents, essays, or notes.\n"
-            "- Reply ONLY with the word 'search' if the user is asking about current events, live web information, code generation, or general knowledge.\n"
-            "Do not include punctuation, spaces, or any other words. Output exactly 'rag' or 'search'."
-        )
-    )
-    user_message = HumanMessage(content=last_message)
-    decision = local_llm.invoke([system_prompt, user_message]).content.strip().lower()
-    print(f"🎯 Router Decision: Directed to -> {decision}")
-    return decision
+# --- 3. Define the Nodes ---
 
-# --- Web Search Agent Node ---
-def web_search_agent(state: AgentState):
-    print("\n🌐 Web Search Agent is activating...")
-    user_query = state["messages"][-1].content
-    print(f"🔍 Searching the live web for: '{user_query}'...")
+def retrieve_node(state: GraphState):
+    """Retrieves documents from your vector store."""
+    question = state["question"]
+    print(f"\n🔎 Retrieving documents from vector store for query: '{question}'...")
+    
+    if vector_db is not None:
+        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+        docs = retriever.invoke(question)
+        doc_texts = [d.page_content for d in docs]
+    else:
+        print("⚠️ Vector store not initialized. Returning empty list.")
+        doc_texts = []
+        
+    return {"documents": doc_texts, "question": question}
+
+def grade_documents_node(state: GraphState):
+    """Evaluates if the retrieved documents are relevant to the question."""
+    question = state["question"]
+    documents = state["documents"]
+    
+    print("⚖️ Grading retrieved documents for relevance...")
+    if not documents:
+        print("⚠️ No documents retrieved. Routing directly to web search.")
+        return {"route": "web_search"}
+        
+    # Set up the LLM with the strict output guardrail
+    structured_llm = llm.with_structured_output(RouteDecision)
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", (
+            "You are an expert grader assessing the relevance of retrieved document chunks to a user question.\n"
+            "Your task is to determine whether the provided document context contains information directly relevant to answering the user question.\n"
+            "If the documents contain useful facts to answer the question, step must be 'generate'.\n"
+            "If the documents do not contain relevant information, step must be 'web_search'.\n"
+            "Be strict. If the document is about a different topic, output 'web_search'."
+        )),
+        ("human", "Retrieved document context: \n\n {document} \n\n User question: {question}")
+    ])
+    
+    grader_chain = prompt | structured_llm
+    
+    # Combine docs for grading
+    doc_text = "\n\n".join(documents)
+    
     try:
-        search_results = web_search_tool.run(user_query)
+        # The LLM is forced to return an object matching RouteDecision
+        decision = grader_chain.invoke({"document": doc_text, "question": question})
+        route_step = decision.step
+    except Exception as e:
+        print(f"❌ Structured grading failed: {e}. Defaulting to 'web_search'.")
+        route_step = "web_search"
+        
+    print(f"🎯 Grader Decision: Directed to -> {route_step}")
+    # We store the decision in the state (or pass it directly to the router)
+    return {"route": route_step}
+
+def generate_node(state: GraphState):
+    """Generates the final answer using the relevant documents."""
+    question = state["question"]
+    documents = state["documents"]
+    
+    print("🤖 Generating the final answer using local documents...")
+    context = "\n\n".join(documents)
+    
+    prompt = f"""You are a helpful assistant. Use the following context to answer the user's query.
+
+Context:
+{context}
+
+Question:
+{question}"""
+    
+    response = llm.invoke(prompt)
+    return {"generation": response.content}
+
+def web_search_node(state: GraphState):
+    """Falls back to web search if local docs fail."""
+    question = state["question"]
+    documents = state["documents"]
+    
+    print(f"🌐 Falling back to live Web Search for: '{question}'...")
+    try:
+        search_results = web_search_tool.run(question)
     except Exception as e:
         search_results = f"Search failed or timed out. Error: {e}"
-    
-    system_message = SystemMessage(
-        content="You are an autonomous Research Agent. Write a factual response based strictly on the search results provided."
-    )
-    combined_input = HumanMessage(content=f"User Question: {user_query}\n\nRaw Internet Search Results:\n{search_results}")
-    ai_response = local_llm.invoke([system_message, combined_input])
-    return {"messages": [AIMessage(content=ai_response.content)]}
+        
+    return {"documents": documents + [search_results]}
 
-# --- Local RAG Agent Node ---
-def rag_agent(state: AgentState):
-    print("\n📄 Local RAG Agent is activating...")
-    global vector_db
-    
-    user_query = state["messages"][-1].content
-    print(f"🔎 Querying local vector database for: '{user_query}'...")
-    
-    if vector_db is None:
-        # Try to reload on the fly in case it was created after startup
-        persist_dir = "./chroma_db"
-        if os.path.exists(persist_dir):
-            print(f"📦 Connecting to persistent Chroma DB at '{persist_dir}'...")
-            vector_db = Chroma(persist_directory=persist_dir, embedding_function=local_embeddings)
-        else:
-            return {"messages": [AIMessage(content="Error: Persistent vector database not initialized. Run ingest.py first.")]}
-    
-    # Retrieve top 3 most relevant document chunks
-    retriever = vector_db.as_retriever(search_kwargs={"k": 3})
-    docs = retriever.invoke(user_query)
-    
-    # Combine the text chunks into a single context string
-    retrieved_context = "\n\n".join([d.page_content for d in docs])
-    
-    # Formulate system prompt
-    system_message = SystemMessage(
-        content=(
-            "You are a strict study companion assistant. Answer the user's question using ONLY the provided "
-            "document context below. If the answer cannot be found in the context, say exactly 'I cannot find that in the documents.' "
-            "Do not make things up."
-        )
-    )
-    
-    combined_input = HumanMessage(
-        content=f"User Question: {user_query}\n\nRetrieved Document Context:\n{retrieved_context}"
-    )
-    
-    print("🤖 Local model is generating a response based on document data...")
-    ai_response = local_llm.invoke([system_message, combined_input])
-    
-    return {"messages": [AIMessage(content=ai_response.content)]}
+# --- 4. Define the Router Function ---
 
-# 1. Initialize the StateGraph
-workflow = StateGraph(AgentState)
+def route_question(state: GraphState) -> Literal["generate", "web_search"]:
+    """Reads the LLM's decision and routes the graph."""
+    # We call the grader node's logic here to get the route
+    decision = grade_documents_node(state)
+    return decision["route"]
 
-# 2. Add the execution nodes to the graph
-workflow.add_node("web_search", web_search_agent)
-workflow.add_node("local_rag", rag_agent)
+# --- 5. Build and Compile the Graph ---
 
-# 3. Set up conditional routing logic
+workflow = StateGraph(GraphState)
+
+# Add nodes
+workflow.add_node("retrieve", retrieve_node)
+workflow.add_node("generate", generate_node)
+workflow.add_node("web_search", web_search_node)
+
+# Set the entry point
+workflow.set_entry_point("retrieve")
+
+# Add a conditional edge right after retrieval
 workflow.add_conditional_edges(
-    START,
-    supervisor_router,
+    "retrieve",
+    route_question,
     {
-        "search": "web_search",
-        "rag": "local_rag"
+        "generate": "generate",     # If router returns "generate", go to generate node
+        "web_search": "web_search"  # If router returns "web_search", go to web search node
     }
 )
 
-# 4. Connect the output of both agents to the END node
-workflow.add_edge("web_search", END)
-workflow.add_edge("local_rag", END)
+# Connect the rest of the flow
+workflow.add_edge("web_search", "generate")
+workflow.add_edge("generate", END)
 
-# 5. Compile the graph
-local_agent_app = workflow.compile()
+# Compile!
+app = workflow.compile()
 
 if __name__ == "__main__":
     print("\n=============================================")
-    print("🚀 RUNNING PERSISTENT MULTI-AGENT SYSTEM")
+    print("🚀 RUNNING CORRECTIVE RAG (CRAG) MULTI-AGENT SYSTEM")
     print("=============================================\n")
     
-    # Test Case: Querying the document details we just ingested
-    print("--- 📝 Test Case: Querying Document Data (RAG) ---")
-    query = "Based on the uploaded project document, who is the project lead for Project Alpha?"
-    inputs = {"messages": [HumanMessage(content=query)]}
+    # Test Case 1: Ingested details (Expected: Route to 'generate')
+    print("--- 📝 Test Case 1: Ask about Project Lead (In-Context) ---")
+    inputs_1 = {"question": "Who is the project lead for Project Alpha?"}
+    output_1 = app.invoke(inputs_1)
+    print("\n🤖 Final Output (Test Case 1):")
+    print(output_1["generation"])
+    print("\n---------------------------------------------\n")
     
-    output = local_agent_app.invoke(inputs)
-    
-    print("\n🤖 Final Graph Response (Local RAG):")
-    print(output["messages"][-1].content)
+    # Test Case 2: Out of context details (Expected: Route to 'web_search')
+    print("--- 📝 Test Case 2: Ask about Super Bowl Winner (Out-of-Context) ---")
+    inputs_2 = {"question": "Who won the latest Super Bowl and what was the score?"}
+    output_2 = app.invoke(inputs_2)
+    print("\n🤖 Final Output (Test Case 2):")
+    print(output_2["generation"])
     print("\n=============================================")
