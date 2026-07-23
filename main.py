@@ -27,14 +27,18 @@ llm = ChatOllama(model="llama3", temperature=0)
 web_search_tool = DuckDuckGoSearchRun()
 local_embeddings = OllamaEmbeddings(model="nomic-embed-text")
 
-# Connect to the local, persistent Chroma vector database
-persist_dir = "./chroma_db"
-if os.path.exists(persist_dir):
-    print(f"📦 Connecting to persistent Chroma DB at '{persist_dir}'...")
-    vector_db = Chroma(persist_directory=persist_dir, embedding_function=local_embeddings)
-else:
-    print(f"⚠️ Warning: Directory '{persist_dir}' not found. Please run ingest.py first.")
-    vector_db = None
+vector_db = None
+
+def get_vector_db():
+    global vector_db
+    if vector_db is None:
+        persist_dir = "./chroma_db"
+        if os.path.exists(persist_dir):
+            print(f"📦 Connecting to persistent Chroma DB at '{persist_dir}'...")
+            vector_db = Chroma(persist_directory=persist_dir, embedding_function=local_embeddings)
+        else:
+            print(f"⚠️ Warning: Directory '{persist_dir}' not found. Please run ingest.py first.")
+    return vector_db
 
 # --- 3. Define the Nodes ---
 
@@ -43,8 +47,9 @@ def retrieve_node(state: GraphState):
     question = state["question"]
     print(f"\n🔎 Retrieving documents from vector store for query: '{question}'...")
     
-    if vector_db is not None:
-        retriever = vector_db.as_retriever(search_kwargs={"k": 3})
+    db = get_vector_db()
+    if db is not None:
+        retriever = db.as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(question)
         doc_texts = [d.page_content for d in docs]
     else:
