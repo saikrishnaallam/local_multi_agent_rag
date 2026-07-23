@@ -213,7 +213,9 @@ To enable tracing:
 
 ## 📂 Project Structure
 
-- [agent_system.py](agent_system.py): The main multi-agent implementation using LangGraph, including the Supervisor Router, Web Search Agent, and Local RAG Agent nodes.
+- [main.py](main.py): The persistent multi-agent implementation using LangGraph, connecting to the local Chroma DB directory and searching document data.
+- [ingest.py](ingest.py): Loader and indexer script to parse PDF files and embed/store them in `./chroma_db` locally.
+- [agent_system.py](agent_system.py): The in-memory multi-agent implementation with mock database seeding (for quick mock verification).
 - [sanity_check.py](sanity_check.py): A quick validation script to verify local connectivity to Ollama and check if the Llama 3 model is running.
 - [requirements.txt](requirements.txt): Defines Python package dependencies required to run the agents.
 
