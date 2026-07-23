@@ -1,36 +1,68 @@
-# Local Multi-Agent RAG System
+# Local Multi-Agent Corrective RAG (CRAG) System
 
-An autonomous multi-agent routing system built using **LangGraph**, **LangChain**, and a local **Llama 3** model running via **Ollama**.
+An autonomous, local Multi-Agent Corrective RAG (CRAG) system built using **LangGraph**, **LangChain**, **Streamlit**, and a local **Llama 3** model running via **Ollama**. 
 
-The system dynamically routes questions between:
-1. **Live Web Search Agent**: Queries DuckDuckGo for current events/general knowledge.
-2. **Local RAG Agent**: Queries a local, in-memory vector database (ChromaDB) for document-specific questions.
+The system features hybrid search, structured document grading, web fallback search, multi-document context tagging, and a beautiful web-based chat interface.
 
-## 📊 System Architecture Flowchart
+---
+
+## 📊 System Architecture & Data Flow
+
+Below is the state workflow map representing our Corrective RAG execution graph:
 
 ```mermaid
 flowchart TD
-    Start([User Question]) --> Router[🧠 Supervisor Router]
-    Router -->|search| WebSearch[🌐 Web Search Agent]
-    Router -->|rag| LocalRAG[📄 Local RAG Agent]
+    Start([User Query]) --> Retrieve[🔍 retrieve Node]
+    Retrieve --> Grade[⚖️ grade_documents_node]
     
-    WebSearch --> DDG[🔍 DuckDuckGo API]
-    DDG --> WebSynth[🤖 Llama3 Synthesis]
+    Grade -->|Relevance Match / generate| Generate[🤖 generate Node]
+    Grade -->|Irrelevant Chunks / web_search| WebSearch[🌐 web_search Node]
     
-    LocalRAG --> Chroma[📦 Chroma DB Lookup]
-    Chroma --> RAGSynth[🤖 Llama3/Chroma Context Synthesis]
-    
-    WebSynth --> End([Final Response])
-    RAGSynth --> End
-    
-    classDef agent fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef tool fill:#bbf,stroke:#333,stroke-width:1px;
-    classDef io fill:#bfb,stroke:#333,stroke-width:1px;
-    
-    class Router,WebSearch,LocalRAG agent;
-    class DDG,Chroma tool;
-    class Start,End io;
+    WebSearch --> Generate
+    Generate --> End([Synthesized Response])
+
+    classDef nodeStyle fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef ioStyle fill:#bfb,stroke:#333,stroke-width:1px;
+    class Retrieve,Grade,Generate,WebSearch nodeStyle;
+    class Start,End ioStyle;
 ```
+
+---
+
+## 🔄 Previous vs. Current Architecture
+
+We transitioned the project from a simple terminal proof-of-concept into a production-ready, interactive local RAG application. Here is a summary of the differences:
+
+| Feature | Previous Architecture (`agent_system.py`) | Current Architecture (`main.py` + `app.py`) |
+| :--- | :--- | :--- |
+| **User Interface** | Terminal script executing predefined test cases. | Dynamic **Streamlit Web UI** with chat bubbles, sidebar file uploaders, and collapsible workflow status trackers. |
+| **Vector DB Lifecycle** | In-Memory Chroma DB (loaded and seeded fresh on every single run). | **Persistent Local Chroma DB** (`./chroma_db`) matching embedded content using `nomic-embed-text`. |
+| **Routing Mechanism** | Supervisor agent classifying user queries into `search` or `rag` at start. | **Corrective RAG (CRAG)**: Retrieves documents first, then uses a strict Pydantic grader (`RouteDecision`) to route queries dynamically to `generate` or `web_search`. |
+| **Ingestion Pipeline** | hardcoded mock strings seeded inside Python memory. | Independent `ingest.py` command-line indexer AND interactive uploader parser utilizing `PyPDFLoader`. |
+| **Database Clearing** | N/A (cleared implicitly when the python process ended). | Safe, SQL-level deletion API execution clearing document IDs cleanly across sessions without causing SQLite write locks. |
+| **Multi-File Context** | Retrieved top 3 vector chunks; no source file metadata. | Retrieves top **10** chunks and tags each with its **source filename metadata** to facilitate cross-document reasoning. |
+
+---
+
+## 🧠 Design Rationale: Why We Built It This Way
+
+### 1. Persistent SQLite Database over In-Memory DB
+* **Why**: An in-memory vector database requires ingestion to run every single time the app starts, which is slow and memory-intensive. Using a local persistent database (`./chroma_db`) decouples the ingestion pipeline (`ingest.py`) from query execution, making startup instantaneous.
+
+### 2. Corrective RAG (CRAG) over Supervisor Routing
+* **Why**: Supervisor routers classify the query before checking if the database contains relevant facts. If the database lacks information, the supervisor would still route to RAG, leading to hallucinations. Corrective RAG retrieves files *first* and grades them. If the graded documents are empty or irrelevant, it triggers `web_search` as an active fallback.
+
+### 3. Pydantic Structured Route Grader
+* **Why**: Prompting local LLMs to output raw strings (like "search" or "rag") is prone to formatting deviations. We use LangChain's Ollama tool binding (`llm.with_structured_output`) to force Llama 3 to output JSON conforming exactly to a Pydantic `RouteDecision` model. If structured output parsing fails, we gracefully catch the error and route to `web_search` to guarantee runtime safety.
+
+### 4. Streamlit Session State Database Coordination
+* **Why**: Streamlit re-runs the entire python script on user input and reloads module imports. If the database object reference was stored inside a Python module, Streamlit's classloader could instantiate multiple cached module copies, leading to out-of-sync database states. Storing the active connection inside `st.session_state.vector_db` and dynamically retrieving it inside the graph guarantees that both the uploader and retriever share the same active SQLite descriptor.
+
+### 5. SQL-Level Deletion vs. Disk Deletion (`shutil.rmtree`)
+* **Why**: Deleting the database folder from disk while the Python process is running causes SQLite to throw `attempt to write a readonly database` due to locked file handles. By keeping the SQLite connection open and calling `vector_db.delete(ids)`, we clear all files at the database layer cleanly and safely.
+
+### 6. Expanded Retrieval Constraint (`k=10`) and Source Tagging
+* **Why**: Setting `k=3` causes search bias where chunks from one PDF crowd out chunks from another, preventing summaries across multiple files. Increasing `k` to `10` allows context from multiple PDFs to load simultaneously. Prepending `[Source File: filename]` helps the LLM distinguish contexts to produce comprehensive multi-file answers.
 
 ---
 
@@ -38,30 +70,23 @@ flowchart TD
 
 ### 1. Install and Start Ollama
 1. Download **Ollama** for macOS/Windows/Linux from [ollama.com](https://ollama.com).
-2. Install and launch the application. Ensure the Ollama icon is visible in your menu bar (macOS) or system tray.
-3. Open your terminal and download the **Llama 3** model:
+2. Install and launch the application.
+3. Open your terminal and pull the required models:
    ```bash
+   # Pull the Llama 3 model for reasoning/generation and grading
    ollama pull llama3
+   
+   # Pull the nomic embedding model for text representation
+   ollama pull nomic-embed-text
    ```
-4. Verify Ollama is running and has the model installed:
+4. Verify Ollama is running and has the models installed:
    ```bash
    ollama list
    ```
 
-> [!TIP]
-> You can also run other local models (e.g., `llama3.1`, `llama3.2`, or `mistral`) by pulling them via Ollama (`ollama pull <model-name>`) and updating the model parameter in `sanity_check.py` and `agent_system.py`.
-
-### 2. Clone the Repository
-Open your terminal and clone the repository to your local machine:
-```bash
-git clone https://github.com/saikrishnaallam/local_multi_agent_rag.git
-cd local_multi_agent_rag
-```
-
-### 3. Configure the Python Virtual Environment
+### 2. Configure the Python Virtual Environment
 *(Recommended Python Version: 3.9, 3.10, or 3.11)*
 
-Set up your python virtual environment and install the required dependencies:
 ```bash
 # Create virtual environment
 python3 -m venv venv
@@ -80,178 +105,36 @@ pip install -r requirements.txt
 
 ## 🚀 Running the Project
 
-### 1. Run the Connection Sanity Check
-Before launching the agent workflow, run the sanity check to confirm your local model is accessible via Ollama:
-
+### 1. Run Ingestion via CLI (Optional)
+You can ingest arbitrary PDF documents to the persistent database directly from your command line:
 ```bash
-python sanity_check.py
+python ingest.py path/to/your/document.pdf
 ```
 
-**Expected Output:**
-```text
-🔄 Connecting to local Llama3 model via Ollama...
-
-✅ Success! Your local AI brain is online.
-🤖 AI Response: Hello! I can confirm that I am running locally via Ollama on your machine.
+### 2. Run the Streamlit Interface (Recommended)
+Launch the interactive web assistant:
+```bash
+streamlit run app.py
 ```
+* The interface will open at `http://localhost:8501`.
+* **Sidebar**: Drop one or more PDFs, click **Process Documents**, and wait for the success notification. (Old document contents will be wiped automatically).
+* **Chat Window**: Type queries like *"Summarize the uploaded documents"* or ask specific fact questions.
+* **Workflow Status**: Expand **Agent Workflow 🕵️‍♂️** in the chat responses to watch LangGraph execute nodes (`retrieve` -> `web_search` -> `generate`) in real time!
 
-### 2. Run the Multi-Agent System
-Run the main system to execute test cases for both the web search and local RAG agents:
-
+### 3. Run the Legacy Terminal Multi-Agent System
+Run the legacy supervisor workflow (using the in-memory mock Chroma setup) through the terminal:
 ```bash
 python agent_system.py
 ```
-
-> [!TIP]
-> If you wish to run the agent system without Python/LangChain deprecation warnings cluttering the terminal, you can ignore them by running:
-> ```bash
-> python -W ignore agent_system.py
-> ```
-
-**Expected Output:**
-```text
-=============================================
-🚀 RUNNING FULL LANGGRAPH MULTI-AGENT SYSTEM
-=============================================
-
---- 📝 Test Case 1: Requesting Live Web Data ---
-🧠 Supervisor is analyzing the request...
-🎯 Router Decision: Directed to -> search
-🌐 Web Search Agent is activating...
-🔍 Searching the live web for: 'Who won the latest Super Bowl and what was the score?'...
-🤖 Final Graph Response (Web Search):
-Based on the search results, the latest Super Bowl (Super Bowl LVIII) was won by the Kansas City Chiefs, who defeated the San Francisco 49ers with a final score of 25-22 on February 11, 2024.
-
---- 📝 Test Case 2: Requesting Document Data ---
-🧠 Supervisor is analyzing the request...
-🎯 Router Decision: Directed to -> rag
-📄 Local RAG Agent is activating...
-🔎 Querying local vector database for: 'Based on the uploaded project document, what database engine does Project Alpha use?'...
-🤖 Local model is generating a response based on document data...
-
-🤖 Final Graph Response (Local RAG):
-Based on the provided document context, Project Alpha uses PostgreSQL version 15 as its primary database engine.
-```
-
----
-
-## 🧠 Routing Behavior (Search vs RAG)
-
-The **Supervisor Router** uses a prompt-based classification logic to decide where to send queries:
-- **Web Search (`search`)**: Triggered for general knowledge, current events, or live web info (e.g., *"Who won the latest Super Bowl and what was the score?"*).
-- **Document RAG (`rag`)**: To trigger the RAG agent, the prompt instructions require the query to explicitly refer to **uploaded files, documents, essays, or notes** (e.g., *"Based on the uploaded project overview document, what database engine does Project Alpha use?"*). 
-
-> [!NOTE]
-> If a query is generic (e.g., *"What database engine does Project Alpha use?"*), the local router will likely classify it as **search** because it is framed as general knowledge rather than a document-specific query.
-
-### 📄 Seeded Mock Document Context
-The local RAG vector database is pre-seeded with details about a mock project overview (`project_alpha_guide.pdf`). It contains the following facts:
-* **Project Name**: Project Alpha
-* **Primary Database**: PostgreSQL version 15
-* **Session Cache**: Redis (latency under 15ms)
-* **Project Lead**: Sarah Jenkins
-* **Deployment Schedule**: Q4 2026
-
-#### Additional RAG Queries to Test:
-You can verify the retrieval capability by running other queries against the RAG system, such as:
-* *"Based on the uploaded project overview document, who is the project lead for Project Alpha?"*
-* *"Based on the uploaded guide, what is the deployment schedule for Project Alpha?"*
-* *"According to the uploaded documents, what cache database is used and what is its latency?"*
-
----
-
-## 🛠️ Visualizing & Debugging with LangSmith (Optional)
-
-Since this system uses LangGraph and LangChain, you can easily trace the agent steps, supervisor routing decisions, and RAG document retrievals in a beautiful visual UI using **LangSmith**.
-
-To enable tracing:
-1. Sign up for a free account at [smith.langchain.com](https://smith.langchain.com).
-2. Generate an API key from your profile settings.
-3. Export the following environment variables in your terminal before running the python scripts:
-   ```bash
-   export LANGCHAIN_TRACING_V2="true"
-   export LANGCHAIN_API_KEY="your-api-key-here"
-   export LANGCHAIN_PROJECT="local-multi-agent-rag"
-   ```
-4. Run the scripts as normal. All executions will automatically be recorded and visualized in your LangSmith dashboard!
-
----
-
-## 🔍 Troubleshooting & Common Issues
-
-### 1. Connection Failed Error
-* **Error**: `❌ Connection Failed. Error Details: ...`
-* **Fix**: Ensure the Ollama app is open and running in your Mac's menu bar or system tray.
-
-### 2. Model Not Found (404)
-* **Error**: `model 'llama3' not found (status code: 404)`
-* **Fix**: Run `ollama pull llama3` in your terminal to download the model weights locally.
-
-### 3. Missing Integration / Import Errors
-* **Error**: `ImportError: cannot import name 'ChatOllama' from 'langchain_community.chat_models'`
-* **Fix**: Make sure you have installed `langchain-ollama` and are importing via `from langchain_ollama import ChatOllama`.
-* **Error**: `ImportError: Could not import chromadb`
-* **Fix**: Run `pip install chromadb` inside your active virtual environment.
-* **Error**: `ImportError: Could not import duckduckgo_search`
-* **Fix**: Run `pip install duckduckgo-search` inside your active virtual environment.
-* **Error**: `ImportError: Could not import langgraph`
-* **Fix**: Run `pip install langgraph` inside your active virtual environment.
-
-### 4. DuckDuckGo Rate Limiting (HTTP 403 Forbidden)
-* **Error**: `HTTPError: 403 Forbidden` or `RatelimitException` during Web Search execution.
-* **Fix**: DuckDuckGo search can occasionally rate-limit public IP addresses during frequent requests. Wait a few minutes before running again, or integrate a paid API like SerpAPI or Google Search for high-concurrency production workloads.
-
----
-
-## 🏗️ Architecture Under the Hood
-- **StateGraph**: LangGraph manages the shared agent state (`messages` and `next_step`).
-- **Supervisor Router**: Classifies the query (`search` or `rag`) using Llama 3.
-- **Web Search Node**: Activates the DuckDuckGo Search tool to fetch raw internet results.
-- **Local RAG Node**: Splits and embeds a mock project overview document (`project_alpha_guide.pdf`) using `OllamaEmbeddings`, indexes it into an **in-memory** Chroma instance (re-seeded on every execution), retrieves context, and answers the query.
 
 ---
 
 ## 📂 Project Structure
 
-- [main.py](main.py): The persistent multi-agent implementation using LangGraph, connecting to the local Chroma DB directory and searching document data.
-- [ingest.py](ingest.py): Loader and indexer script to parse PDF files and embed/store them in `./chroma_db` locally.
-- [agent_system.py](agent_system.py): The in-memory multi-agent implementation with mock database seeding (for quick mock verification).
-- [sanity_check.py](sanity_check.py): A quick validation script to verify local connectivity to Ollama and check if the Llama 3 model is running.
-- [requirements.txt](requirements.txt): Defines Python package dependencies required to run the agents.
-
----
-
-## 🛠️ Customizing the System & Graph
-
-You can easily extend this multi-agent system to add more capabilities:
-
-### 1. Adding a New Agent/Node
-To add a new agent (e.g., a "Math Agent"):
-1. Define the node function in [agent_system.py](agent_system.py):
-   ```python
-   def math_agent(state: AgentState):
-       # Define math agent logic here
-       return {"messages": [AIMessage(content="Math agent response")]}
-   ```
-2. Register the node in the StateGraph definition:
-   ```python
-   workflow.add_node("math_agent", math_agent)
-   ```
-3. Connect the node output to `END`:
-   ```python
-   workflow.add_edge("math_agent", END)
-   ```
-
-### 2. Updating the Supervisor Router
-Update the supervisor classification prompt inside `supervisor_router()` to define when queries should route to the new agent, and update the output map:
-```python
-workflow.add_conditional_edges(
-    START,
-    supervisor_router,
-    {
-        "search": "web_search",
-        "rag": "local_rag",
-        "math": "math_agent" # New route option
-    }
-)
-```
+* [app.py](app.py): Streamlit web application orchestrating chat history, sidebar PDF uploaders, dynamic database resets, and real-time execution trace rendering.
+* [main.py](main.py): Corrective RAG (CRAG) LangGraph backend containing the structured grader, retrieval formatting, and workflow compilation.
+* [ingest.py](ingest.py): CLI ingestion script to split and store text pages in `./chroma_db` using `nomic-embed-text`.
+* [agent_system.py](agent_system.py): Legacy in-memory Hybrid Search agent containing `CrossEncoder` reranking logic.
+* [sanity_check.py](sanity_check.py): Quick connectivity utility validating Ollama communication.
+* [requirements.txt](requirements.txt): List of dependencies required to run the project.
+* [.gitignore](.gitignore): Ignores local database folders (`chroma_db/`) and test PDFs.
