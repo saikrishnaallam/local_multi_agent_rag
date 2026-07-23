@@ -46,12 +46,21 @@ with st.sidebar:
                     # Load and split document
                     loader = PyPDFLoader(tmp_path)
                     pages = loader.load()
+                    if not pages:
+                        st.warning(f"Could not extract any pages from '{uploaded_file.name}'. Is it empty or scanned?")
+                        continue
+                        
                     text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
                     chunks = text_splitter.split_documents(pages)
                     
-                    # Add to vector database
-                    main.vector_db.add_documents(chunks)
-                    total_chunks += len(chunks)
+                    if chunks:
+                        # Add to vector database
+                        main.vector_db.add_documents(chunks)
+                        total_chunks += len(chunks)
+                    else:
+                        st.warning(f"No text chunks could be generated from '{uploaded_file.name}'.")
+                except Exception as e:
+                    st.error(f"Error processing '{uploaded_file.name}': {e}")
                 finally:
                     # Clean up temp file
                     if os.path.exists(tmp_path):
