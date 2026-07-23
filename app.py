@@ -26,18 +26,17 @@ with st.sidebar:
     
     if st.button("Process Documents") and uploaded_files:
         with st.spinner("Processing documents into Vector Store..."):
-            import shutil
+            # Ensure the vector database is initialized in session state
+            if st.session_state.vector_db is None:
+                st.session_state.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
             
-            # Clear vector store reference and delete directory on disk to guarantee a clean slate
-            st.session_state.vector_db = None
-            if os.path.exists("./chroma_db"):
-                try:
-                    shutil.rmtree("./chroma_db")
-                except Exception as e:
-                    st.warning(f"Could not clear database directory: {e}")
-            
-            # Recreate a fresh Chroma instance
-            st.session_state.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
+            try:
+                # Clear all old document IDs to prevent mixing old context with new uploads
+                all_ids = st.session_state.vector_db.get()["ids"]
+                if all_ids:
+                    st.session_state.vector_db.delete(all_ids)
+            except Exception as e:
+                st.warning(f"Could not clear old vector database: {e}")
             
             total_chunks = 0
             for uploaded_file in uploaded_files:
