@@ -11,6 +11,8 @@ from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
+from sentence_transformers import CrossEncoder
+from langchain_community.retrievers import BM25Retriever
 
 # 1. Define the Shared Memory (State)
 class AgentState(TypedDict):
@@ -25,6 +27,10 @@ local_embeddings = OllamaEmbeddings(model="llama3")
 
 # Global placeholder for our vector database
 vector_db = None
+bm25_retriever = None
+
+# Initialize lightweight Cross-Encoder model for reranking
+reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 # --- Existing Router Node (from Step 2) ---
 def supervisor_router(state: AgentState) -> Literal["rag", "search"]:
@@ -64,23 +70,43 @@ def web_search_agent(state: AgentState):
 
 # 🌟 NEW NODE: Local RAG Agent Node Logic
 def rag_agent(state: AgentState):
-    """Queries the local vector database and generates an answer strictly using document context."""
+    """RAG Node with Hybrid Search (Vector + BM25) and Cross-Encoder Reranking."""
     print("\n📄 Local RAG Agent is activating...")
-    global vector_db
+    global vector_db, bm25_retriever
     
     # 1. Extract the user query
     user_query = state["messages"][-1].content
-    print(f"🔎 Querying local vector database for: '{user_query}'...")
+    print(f"🔎 Querying local hybrid database for: '{user_query}'...")
     
-    if vector_db is None:
+    if vector_db is None or bm25_retriever is None:
         return {"messages": [AIMessage(content="Error: No documents have been indexed into the vector database yet.")]}
     
-    # 2. Retrieve top 3 most relevant document chunks
-    retriever = vector_db.as_retriever(search_kwargs={"k": 3})
-    docs = retriever.invoke(user_query)
+    # Step A: Hybrid Search Candidate Retrieval 🔍
+    vector_docs = vector_db.similarity_search(user_query, k=5)
+    bm25_docs = bm25_retriever.invoke(user_query)  # Top 5 keyword matches
     
-    # Combine the text chunks into a single context string
-    retrieved_context = "\n\n".join([d.page_content for d in docs])
+    # Step B: Deduplicate Candidates
+    combined_docs = list(
+        {doc.page_content: doc for doc in vector_docs + bm25_docs}.values()
+    )
+    
+    # Step C: Cross-Encoder Reranking ⚖️
+    # Prepare query-document pairs for the Cross-Encoder
+    pairs = [[user_query, doc.page_content] for doc in combined_docs]
+    
+    # Predict relevance scores
+    scores = reranker.predict(pairs)
+    
+    # Pair docs with scores and sort in descending order
+    scored_docs = sorted(
+        zip(combined_docs, scores), key=lambda x: x[1], reverse=True
+    )
+    
+    # Take the top 3 highest-scoring documents
+    top_docs = [doc for doc, score in scored_docs[:3]]
+    
+    # Step D: Format Context & Prompt LLM 🤖
+    retrieved_context = "\n\n".join([d.page_content for d in top_docs])
     
     # 3. Formulate the system prompt to prevent hallucinations
     system_message = SystemMessage(
@@ -96,7 +122,7 @@ def rag_agent(state: AgentState):
     )
     
     # 4. Generate the response using our local Llama3 model
-    print("🤖 Local model is generating a response based on document data...")
+    print("🤖 Local model is generating a response based on document data with reranked context...")
     ai_response = local_llm.invoke([system_message, combined_input])
     
     return {"messages": [AIMessage(content=ai_response.content)]}
@@ -105,7 +131,7 @@ def rag_agent(state: AgentState):
 # --- Helper Function to Seed Fake Data for Testing ---
 def seed_mock_vector_db():
     """Simulates uploading a document so our RAG agent has something to read."""
-    global vector_db
+    global vector_db, bm25_retriever
     print("📦 Seeding local vector database with mock textbook data...")
     
     # Sample document text simulating a study guide
@@ -125,7 +151,12 @@ def seed_mock_vector_db():
     
     # Build a local, in-memory Chroma instance using local Ollama embeddings
     vector_db = Chroma.from_documents(chunks, local_embeddings)
-    print("✅ Mock Vector DB successfully initialized and loaded into memory.")
+    
+    # Build BM25 keyword retriever
+    bm25_retriever = BM25Retriever.from_documents(chunks)
+    bm25_retriever.k = 5
+    
+    print("✅ Mock Vector DB and BM25 Retriever successfully initialized and loaded into memory.")
 
 # ... (Keep all your existing nodes: supervisor_router, web_search_agent, rag_agent) ...
 
