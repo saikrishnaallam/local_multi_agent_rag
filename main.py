@@ -55,9 +55,13 @@ def retrieve_node(state: GraphState):
         db = get_vector_db()
         
     if db is not None:
-        retriever = db.as_retriever(search_kwargs={"k": 3})
+        retriever = db.as_retriever(search_kwargs={"k": 10})
         docs = retriever.invoke(question)
-        doc_texts = [d.page_content for d in docs]
+        doc_texts = []
+        for d in docs:
+            source = d.metadata.get("source", "Unknown")
+            source_name = os.path.basename(source)
+            doc_texts.append(f"[Source File: {source_name}]\n{d.page_content}")
     else:
         print("⚠️ Vector store not initialized. Returning empty list.")
         doc_texts = []
