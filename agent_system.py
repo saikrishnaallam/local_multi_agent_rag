@@ -1,10 +1,11 @@
 # Add this import at the very top with your other imports
 from langgraph.graph import StateGraph, START, END
 
-from typing import TypedDict, Annotated, Literal
+from typing import Annotated, Literal, Sequence, List
+from typing_extensions import TypedDict
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
 from langgraph.graph.message import add_messages
 from langchain_ollama import ChatOllama, OllamaEmbeddings
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_community.tools import DuckDuckGoSearchRun
 
 # 🌟 NEW IMPORTS FOR STEP 4
@@ -14,10 +15,12 @@ from langchain_core.documents import Document
 from sentence_transformers import CrossEncoder
 from langchain_community.retrievers import BM25Retriever
 
-# 1. Define the Shared Memory (State)
+# ==========================================
+# STEP 2: Define Agent State
+# ==========================================
 class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    next_step: str
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    context: List[str]  # Explicitly stores retrieved chunks
 
 # 2. Initialize the Local Brain, Search Tool, and Local Embeddings
 local_llm = ChatOllama(model="llama3", temperature=0)
@@ -69,7 +72,7 @@ def web_search_agent(state: AgentState):
 
 
 # 🌟 NEW NODE: Local RAG Agent Node Logic
-def rag_agent(state: AgentState):
+def rag_agent_node(state: AgentState):
     """RAG Node with Hybrid Search (Vector + BM25) and Cross-Encoder Reranking."""
     print("\n📄 Local RAG Agent is activating...")
     global vector_db, bm25_retriever
@@ -125,7 +128,10 @@ def rag_agent(state: AgentState):
     print("🤖 Local model is generating a response based on document data with reranked context...")
     ai_response = local_llm.invoke([system_message, combined_input])
     
-    return {"messages": [AIMessage(content=ai_response.content)]}
+    return {
+        "messages": [AIMessage(content=ai_response.content)],
+        "context": [d.page_content for d in top_docs]
+    }
 
 
 # --- Helper Function to Seed Fake Data for Testing ---
@@ -160,29 +166,32 @@ def seed_mock_vector_db():
 
 # ... (Keep all your existing nodes: supervisor_router, web_search_agent, rag_agent) ...
 
-# 1. Initialize the StateGraph with our custom AgentState
+# ==========================================
+# STEP 3: Assemble the Workflow
+# ==========================================
+# 1. Initialize the graph with our state
 workflow = StateGraph(AgentState)
 
-# 2. Add the execution nodes to the graph
-workflow.add_node("web_search", web_search_agent)
-workflow.add_node("local_rag", rag_agent)
+# 2. Add our operational nodes (ensure these functions are defined above this block)
+workflow.add_node("web_search", web_search_agent) 
+workflow.add_node("local_rag", rag_agent_node)    
 
-# 3. Set up the conditional routing logic from the starting line
+# 3. Add the Supervisor Router at the starting line
 workflow.add_conditional_edges(
-    START,                # The default starting point of the graph
-    supervisor_router,    # The function that decides where to go
+    START,
+    supervisor_router,
     {
         "search": "web_search",
         "rag": "local_rag"
     }
 )
 
-# 4. Connect the output of both agents to the END node
+# 4. Connect both agent endpoints to the finish line
 workflow.add_edge("web_search", END)
 workflow.add_edge("local_rag", END)
 
-# 5. Compile the graph into a single executable application
-local_agent_app = workflow.compile()
+# 5. Compile the executable application
+agent_app = workflow.compile()
 
 # --- Upgraded Local Graph Verification Test ---
 if __name__ == "__main__":
@@ -199,7 +208,7 @@ if __name__ == "__main__":
     inputs_1 = {"messages": [HumanMessage(content=query_1)]}
     
     # Run the compiled LangGraph application!
-    output_1 = local_agent_app.invoke(inputs_1)
+    output_1 = agent_app.invoke(inputs_1)
     
     print("\n🤖 Final Graph Response (Web Search):")
     print(output_1["messages"][-1].content)
@@ -211,8 +220,11 @@ if __name__ == "__main__":
     inputs_2 = {"messages": [HumanMessage(content=query_2)]}
     
     # Run the compiled LangGraph application again!
-    output_2 = local_agent_app.invoke(inputs_2)
+    output_2 = agent_app.invoke(inputs_2)
     
     print("\n🤖 Final Graph Response (Local RAG):")
     print(output_2["messages"][-1].content)
+    print("\n📄 Retrieved Context Chunks saved in State:")
+    for i, chunk in enumerate(output_2.get("context", []), 1):
+        print(f"[{i}]: {chunk}")
     print("\n=============================================")
