@@ -47,7 +47,13 @@ def retrieve_node(state: GraphState):
     question = state["question"]
     print(f"\n🔎 Retrieving documents from vector store for query: '{question}'...")
     
-    db = get_vector_db()
+    import streamlit as st
+    db = None
+    if "vector_db" in st.session_state and st.session_state.vector_db is not None:
+        db = st.session_state.vector_db
+    else:
+        db = get_vector_db()
+        
     if db is not None:
         retriever = db.as_retriever(search_kwargs={"k": 3})
         docs = retriever.invoke(question)

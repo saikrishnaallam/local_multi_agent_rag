@@ -9,10 +9,15 @@ from langchain_community.vectorstores import Chroma
 st.set_page_config(page_title="Multi-Agent RAG", page_icon="🤖")
 st.title("Interactive RAG Assistant 🤖")
 
-# --- 1. Memory Initialization ---
-# If "messages" isn't in our session state yet, create an empty list
+# --- 1. Memory & Vector DB Initialization ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+if "vector_db" not in st.session_state:
+    if os.path.exists("./chroma_db"):
+        st.session_state.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
+    else:
+        st.session_state.vector_db = None
 
 # --- 2. Sidebar for File Uploads ---
 with st.sidebar:
@@ -21,20 +26,19 @@ with st.sidebar:
     
     if st.button("Process Documents") and uploaded_files:
         with st.spinner("Processing documents into Vector Store..."):
-            import main  # Import main module to reference the global vector_db
+            import shutil
             
-            # Re-initialize or load the vector database
-            if main.vector_db is None:
-                main.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
+            # Clear vector store reference and delete directory on disk to guarantee a clean slate
+            st.session_state.vector_db = None
+            if os.path.exists("./chroma_db"):
+                try:
+                    shutil.rmtree("./chroma_db")
+                except Exception as e:
+                    st.warning(f"Could not clear database directory: {e}")
             
-            try:
-                # Clear all old document IDs to prevent mixing old context with new uploads
-                all_ids = main.vector_db.get()["ids"]
-                if all_ids:
-                    main.vector_db.delete(all_ids)
-            except Exception as e:
-                st.warning(f"Could not clear old vector database: {e}")
-                
+            # Recreate a fresh Chroma instance
+            st.session_state.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
+            
             total_chunks = 0
             for uploaded_file in uploaded_files:
                 # Save uploaded file to a temporary file
@@ -55,7 +59,7 @@ with st.sidebar:
                     
                     if chunks:
                         # Add to vector database
-                        main.vector_db.add_documents(chunks)
+                        st.session_state.vector_db.add_documents(chunks)
                         total_chunks += len(chunks)
                     else:
                         st.warning(f"No text chunks could be generated from '{uploaded_file.name}'.")
