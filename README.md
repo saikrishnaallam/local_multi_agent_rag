@@ -1,28 +1,45 @@
-# Local Multi-Agent Corrective RAG (CRAG) System
+# Local Multi-Agent Corrective RAG (CRAG) System 🤖
 
-An autonomous, local Multi-Agent Corrective RAG (CRAG) system built using **LangGraph**, **LangChain**, **Streamlit**, and a local **Llama 3** model running via **Ollama**. 
+🚀 **A 100% private, local, and autonomous multi-agent Corrective RAG (CRAG) system.** Built using **LangGraph**, **LangChain**, and **Streamlit**, powered by local models running via **Ollama**.
 
-The system features hybrid search, structured document grading, web fallback search, multi-document context tagging, and a beautiful web-based chat interface.
+---
+
+### 🌟 Project Status & Badges
+[![Python Version](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit App](https://img.shields.io/badge/Streamlit-1.60.0-FF4B4B.svg?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![LangChain Framework](https://img.shields.io/badge/LangChain-0.3-orange.svg?logo=chainlink&logoColor=white)](https://www.langchain.com/)
+[![LangGraph Orchestrator](https://img.shields.io/badge/LangGraph-Active-darkgreen.svg)](https://github.com/langchain-ai/langgraph)
+[![Ollama Engine](https://img.shields.io/badge/Ollama-Llama_3_%26_Nomic-black.svg)](https://ollama.com/)
+
+---
+
+## ✨ Key Highlights
+
+*   **🛡️ 100% Local & Private**: No data leaves your machine. Generative reasoning (Llama 3) and text representations (`nomic-embed-text`) execute fully locally.
+*   **⚖️ Self-Corrective (CRAG) Routing**: The agent does not blindly trust database search. It retrieves context, grades it using a strict Pydantic model, and automatically falls back to **DuckDuckGo Web Search** if your files don't have the answer.
+*   **📄 Smarter Multi-Document Indexing**: Upload multiple PDF documents at once. The retriever extracts text chunks, prepends source document metadata tags, and feeds context from all files to the LLM in a single turn.
+*   **🕵️‍♂️ Real-Time Agent Trace**: Watch the LangGraph state machine execute nodes (`retrieve` ➡️ `web_search` ➡️ `generate`) inside an expandable visual status console.
+*   **💾 SQLite Session Synchronization**: Fully integrated Streamlit memory configuration guarantees that your query retriever and document indexer share the same database connections across browser reload cycles.
 
 ---
 
 ## 📊 System Architecture & Data Flow
 
-Below is the state workflow map representing our Corrective RAG execution graph:
+Our agent runs on a compiled state machine, ensuring structured execution paths based on real-time grading:
 
 ```mermaid
 flowchart TD
-    Start([User Query]) --> Retrieve[🔍 retrieve Node]
-    Retrieve --> Grade[⚖️ grade_documents_node]
+    Start([User Query]) -->|Query Vector Store| Retrieve[🔍 retrieve Node]
+    Retrieve -->|Grade Context| Grade[⚖️ grade_documents_node]
     
     Grade -->|Relevance Match / generate| Generate[🤖 generate Node]
     Grade -->|Irrelevant Chunks / web_search| WebSearch[🌐 web_search Node]
     
-    WebSearch --> Generate
+    WebSearch -->|Web Context| Generate
     Generate --> End([Synthesized Response])
 
-    classDef nodeStyle fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef ioStyle fill:#bfb,stroke:#333,stroke-width:1px;
+    classDef nodeStyle fill:#4A154B,stroke:#333,stroke-width:2px,color:#fff;
+    classDef ioStyle fill:#007A5E,stroke:#333,stroke-width:1px,color:#fff;
     class Retrieve,Grade,Generate,WebSearch nodeStyle;
     class Start,End ioStyle;
 ```
@@ -31,60 +48,45 @@ flowchart TD
 
 ## 🔄 Previous vs. Current Architecture
 
-We transitioned the project from a simple terminal proof-of-concept into a production-ready, interactive local RAG application. Here is a summary of the differences:
+We did extensive refactoring to turn a CLI script into a fully operational local RAG workspace.
 
-| Feature | Previous Architecture (`agent_system.py`) | Current Architecture (`main.py` + `app.py`) |
-| :--- | :--- | :--- |
-| **User Interface** | Terminal script executing predefined test cases. | Dynamic **Streamlit Web UI** with chat bubbles, sidebar file uploaders, and collapsible workflow status trackers. |
-| **Vector DB Lifecycle** | In-Memory Chroma DB (loaded and seeded fresh on every single run). | **Persistent Local Chroma DB** (`./chroma_db`) matching embedded content using `nomic-embed-text`. |
-| **Routing Mechanism** | Supervisor agent classifying user queries into `search` or `rag` at start. | **Corrective RAG (CRAG)**: Retrieves documents first, then uses a strict Pydantic grader (`RouteDecision`) to route queries dynamically to `generate` or `web_search`. |
-| **Ingestion Pipeline** | hardcoded mock strings seeded inside Python memory. | Independent `ingest.py` command-line indexer AND interactive uploader parser utilizing `PyPDFLoader`. |
-| **Database Clearing** | N/A (cleared implicitly when the python process ended). | Safe, SQL-level deletion API execution clearing document IDs cleanly across sessions without causing SQLite write locks. |
-| **Multi-File Context** | Retrieved top 3 vector chunks; no source file metadata. | Retrieves top **10** chunks and tags each with its **source filename metadata** to facilitate cross-document reasoning. |
-
----
-
-## 🧠 Design Rationale: Why We Built It This Way
-
-### 1. Persistent SQLite Database over In-Memory DB
-* **Why**: An in-memory vector database requires ingestion to run every single time the app starts, which is slow and memory-intensive. Using a local persistent database (`./chroma_db`) decouples the ingestion pipeline (`ingest.py`) from query execution, making startup instantaneous.
-
-### 2. Corrective RAG (CRAG) over Supervisor Routing
-* **Why**: Supervisor routers classify the query before checking if the database contains relevant facts. If the database lacks information, the supervisor would still route to RAG, leading to hallucinations. Corrective RAG retrieves files *first* and grades them. If the graded documents are empty or irrelevant, it triggers `web_search` as an active fallback.
-
-### 3. Pydantic Structured Route Grader
-* **Why**: Prompting local LLMs to output raw strings (like "search" or "rag") is prone to formatting deviations. We use LangChain's Ollama tool binding (`llm.with_structured_output`) to force Llama 3 to output JSON conforming exactly to a Pydantic `RouteDecision` model. If structured output parsing fails, we gracefully catch the error and route to `web_search` to guarantee runtime safety.
-
-### 4. Streamlit Session State Database Coordination
-* **Why**: Streamlit re-runs the entire python script on user input and reloads module imports. If the database object reference was stored inside a Python module, Streamlit's classloader could instantiate multiple cached module copies, leading to out-of-sync database states. Storing the active connection inside `st.session_state.vector_db` and dynamically retrieving it inside the graph guarantees that both the uploader and retriever share the same active SQLite descriptor.
-
-### 5. SQL-Level Deletion vs. Disk Deletion (`shutil.rmtree`)
-* **Why**: Deleting the database folder from disk while the Python process is running causes SQLite to throw `attempt to write a readonly database` due to locked file handles. By keeping the SQLite connection open and calling `vector_db.delete(ids)`, we clear all files at the database layer cleanly and safely.
-
-### 6. Expanded Retrieval Constraint (`k=10`) and Source Tagging
-* **Why**: Setting `k=3` causes search bias where chunks from one PDF crowd out chunks from another, preventing summaries across multiple files. Increasing `k` to `10` allows context from multiple PDFs to load simultaneously. Prepending `[Source File: filename]` helps the LLM distinguish contexts to produce comprehensive multi-file answers.
+| Feature | Legacy Setup (`agent_system.py`) | Refactored Setup (`main.py` + `app.py`) | Why we changed it |
+| :--- | :--- | :--- | :--- |
+| **User Interface** | 💻 Terminal console executing hardcoded queries. | 🌐 **Web Chat UI** with sidebars, upload drag-and-drop slots, and node tracking expanders. | To make the local workspace accessible, user-friendly, and interactive. |
+| **Vector DB Lifecycle** | 🧠 In-Memory Chroma DB (seeded fresh on startup). | 📦 **Persistent Local Chroma DB** (`./chroma_db`) with file caching. | Saves processing time by storing indexed documents locally on disk. |
+| **Routing Accuracy** | 🧠 Supervisor router classified query paths before vector retrieval. | ⚖️ **Corrective RAG (CRAG)**: Retrieves data first, then uses Pydantic structured grading. | Prevents hallucinations by validating data relevance before generation. |
+| **Session Memory** | ❌ None (lost when terminal process exits). | 💾 **Streamlit `st.session_state` Connection Binding**. | Prevents Streamlit's script-reload cycles from creating conflicting database descriptors. |
+| **Multiple File Support** | ❌ Restricted to `k=3` chunks (crowds out extra PDFs). | ✅ **Expanded `k=10` with custom Source Metadata Tagging**. | Supports cross-document summarization by mapping chunk boundaries directly to source files. |
 
 ---
 
-## 🛠️ Step-by-Step Setup Procedure
+## 🧠 Under the Hood: Key Design Decisions
+
+> [!IMPORTANT]
+> **No Disk-Level Folder Deletes (`shutil.rmtree`)**
+> Deleting database directories while an active process holds SQLite connections throws `readonly database` errors. We use the native Chroma SQL-level API `get()["ids"]` and `delete(ids)` to wipe files cleanly without file lock exceptions.
+
+> [!TIP]
+> **Strict Grader Tool Binding**
+> Prompting local models to output simple strings often leads to unexpected parsing errors. We wrap the grader inside a Pydantic model (`RouteDecision`) and enforce structured JSON schemas via Ollama's tool binding.
+
+---
+
+## 🛠️ Step-by-Step Quick Start
 
 ### 1. Install and Start Ollama
 1. Download **Ollama** for macOS/Windows/Linux from [ollama.com](https://ollama.com).
 2. Install and launch the application.
-3. Open your terminal and pull the required models:
+3. Open your terminal and pull the models:
    ```bash
-   # Pull the Llama 3 model for reasoning/generation and grading
+   # Llama 3 for reasoning, routing and synthesis
    ollama pull llama3
    
-   # Pull the nomic embedding model for text representation
+   # Nomic embeddings for document representations
    ollama pull nomic-embed-text
    ```
-4. Verify Ollama is running and has the models installed:
-   ```bash
-   ollama list
-   ```
 
-### 2. Configure the Python Virtual Environment
+### 2. Configure Python Virtual Environment
 *(Recommended Python Version: 3.9, 3.10, or 3.11)*
 
 ```bash
@@ -105,36 +107,28 @@ pip install -r requirements.txt
 
 ## 🚀 Running the Project
 
-### 1. Run Ingestion via CLI (Optional)
-You can ingest arbitrary PDF documents to the persistent database directly from your command line:
-```bash
-python ingest.py path/to/your/document.pdf
-```
-
-### 2. Run the Streamlit Interface (Recommended)
+### 1. Run the Web Interface (Recommended)
 Launch the interactive web assistant:
 ```bash
 streamlit run app.py
 ```
-* The interface will open at `http://localhost:8501`.
-* **Sidebar**: Drop one or more PDFs, click **Process Documents**, and wait for the success notification. (Old document contents will be wiped automatically).
-* **Chat Window**: Type queries like *"Summarize the uploaded documents"* or ask specific fact questions.
-* **Workflow Status**: Expand **Agent Workflow 🕵️‍♂️** in the chat responses to watch LangGraph execute nodes (`retrieve` -> `web_search` -> `generate`) in real time!
+* Access the app in your browser at `http://localhost:8501`.
+* Drag and drop multiple PDF files in the sidebar, click **Process Documents**, and start chatting.
 
-### 3. Run the Legacy Terminal Multi-Agent System
-Run the legacy supervisor workflow (using the in-memory mock Chroma setup) through the terminal:
+### 2. Run CLI Ingestion (Alternative)
+You can also index documents directly using the terminal utility:
 ```bash
-python agent_system.py
+python ingest.py path/to/document.pdf
 ```
 
 ---
 
 ## 📂 Project Structure
 
-* [app.py](app.py): Streamlit web application orchestrating chat history, sidebar PDF uploaders, dynamic database resets, and real-time execution trace rendering.
-* [main.py](main.py): Corrective RAG (CRAG) LangGraph backend containing the structured grader, retrieval formatting, and workflow compilation.
-* [ingest.py](ingest.py): CLI ingestion script to split and store text pages in `./chroma_db` using `nomic-embed-text`.
-* [agent_system.py](agent_system.py): Legacy in-memory Hybrid Search agent containing `CrossEncoder` reranking logic.
-* [sanity_check.py](sanity_check.py): Quick connectivity utility validating Ollama communication.
-* [requirements.txt](requirements.txt): List of dependencies required to run the project.
-* [.gitignore](.gitignore): Ignores local database folders (`chroma_db/`) and test PDFs.
+*   [app.py](app.py): Streamlit web application managing uploader actions, memory states, and real-time execution steps.
+*   [main.py](main.py): Corrective RAG (CRAG) graph workflow connecting structured document grading and fallback search.
+*   [ingest.py](ingest.py): CLI loading utility which splits and indexes PDFs into `./chroma_db`.
+*   [agent_system.py](agent_system.py): Legacy supervisor-routed in-memory RAG containing mock DB seeds.
+*   [sanity_check.py](sanity_check.py): Verifies local connection to Ollama and loaded model states.
+*   [requirements.txt](requirements.txt): Python dependency configurations.
+*   [.gitignore](.gitignore): Excludes cache directories and local document files.
