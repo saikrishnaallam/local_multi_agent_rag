@@ -23,9 +23,17 @@ with st.sidebar:
         with st.spinner("Processing documents into Vector Store..."):
             import main  # Import main module to reference the global vector_db
             
-            # If main's vector_db is None, initialize it with persistent folder
+            # Re-initialize or load the vector database
             if main.vector_db is None:
                 main.vector_db = Chroma(persist_directory="./chroma_db", embedding_function=local_embeddings)
+            else:
+                try:
+                    # Clear all old document IDs to prevent mixing old context with new uploads
+                    all_ids = main.vector_db.get()["ids"]
+                    if all_ids:
+                        main.vector_db.delete(all_ids)
+                except Exception as e:
+                    st.warning(f"Could not clear old vector database: {e}")
                 
             total_chunks = 0
             for uploaded_file in uploaded_files:
