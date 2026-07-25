@@ -107,7 +107,13 @@ pip install -r requirements.txt
 
 ## 🚀 Running the Project
 
-### 1. Run the Web Interface (Recommended)
+### 1. Verify Local Model Connection (Recommended)
+Before launching the applications, run the sanity check to confirm your local models are correctly running and accessible via Ollama:
+```bash
+python sanity_check.py
+```
+
+### 2. Run the Web Interface (Recommended)
 Launch the interactive web assistant:
 ```bash
 streamlit run app.py
@@ -115,7 +121,7 @@ streamlit run app.py
 * Access the app in your browser at `http://localhost:8501`.
 * Drag and drop multiple PDF files in the sidebar, click **Process Documents**, and start chatting.
 
-### 2. Run CLI Ingestion (Alternative)
+### 3. Run CLI Ingestion (Alternative)
 You can also index documents directly using the terminal utility:
 ```bash
 python ingest.py path/to/document.pdf
@@ -128,7 +134,7 @@ python ingest.py path/to/document.pdf
 *   [app.py](app.py): Streamlit web application managing uploader actions, memory states, and real-time execution steps.
 *   [main.py](main.py): Corrective RAG (CRAG) graph workflow connecting structured document grading and fallback search.
 *   [ingest.py](ingest.py): CLI loading utility which splits and indexes PDFs into `./chroma_db`.
-*   [agent_system.py](agent_system.py): Legacy supervisor-routed in-memory RAG containing mock DB seeds.
+*   [agent_system.py](agent_system.py): Legacy supervisor-routed in-memory RAG implementation featuring Hybrid Search (Vector + BM25) and Cross-Encoder reranking, populated with mock DB seeds.
 *   [sanity_check.py](sanity_check.py): Verifies local connection to Ollama and loaded model states.
 *   [requirements.txt](requirements.txt): Python dependency configurations.
 *   [.gitignore](.gitignore): Excludes cache directories and local document files.
