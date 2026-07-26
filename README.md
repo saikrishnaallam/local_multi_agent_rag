@@ -127,6 +127,29 @@ You can also index documents directly using the terminal utility:
 python ingest.py path/to/document.pdf
 ```
 
+### 4. Run Legacy Terminal Agent System (Optional)
+If you want to run the original supervisor-routed hybrid search agent with Cross-Encoder reranking in your terminal:
+```bash
+python agent_system.py
+```
+
+---
+
+## 🛠️ Visualizing & Debugging with LangSmith (Optional)
+
+Since this system is built on LangGraph and LangChain, you can easily trace the agent steps, document retrieves, grader decisions, and generative prompts in a beautiful visual UI using **LangSmith**.
+
+To enable tracing:
+1. Sign up for a free account at [smith.langchain.com](https://smith.langchain.com).
+2. Generate an API key from your profile settings.
+3. Export the following environment variables in your terminal before running the python applications:
+   ```bash
+   export LANGCHAIN_TRACING_V2="true"
+   export LANGCHAIN_API_KEY="your-api-key-here"
+   export LANGCHAIN_PROJECT="local-multi-agent-rag"
+   ```
+4. Run the scripts or Streamlit interface as normal. All node transitions and model calls will automatically be captured and visualized in your LangSmith dashboard!
+
 ---
 
 ## 📂 Project Structure
