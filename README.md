@@ -127,7 +127,16 @@ You can also index documents directly using the terminal utility:
 python ingest.py path/to/document.pdf
 ```
 
-### 4. Run Legacy Terminal Agent System (Optional)
+### 4. Run Corrective RAG CLI (Alternative)
+You can test the main Corrective RAG (CRAG) state machine directly in the terminal:
+```bash
+python main.py
+```
+This script runs preconfigured test cases:
+* **In-Context Query**: Asks about "Project Alpha" (expects local database retrieval ➡️ answer generation).
+* **Out-of-Context Query**: Asks about the "Super Bowl" (expects retrieval ➡️ fallback to DuckDuckGo Web Search ➡️ answer generation).
+
+### 5. Run Legacy Terminal Agent System (Optional)
 If you want to run the original supervisor-routed hybrid search agent with Cross-Encoder reranking in your terminal:
 ```bash
 python agent_system.py
@@ -159,5 +168,6 @@ To enable tracing:
 *   [ingest.py](ingest.py): CLI loading utility which splits and indexes PDFs into `./chroma_db`.
 *   [agent_system.py](agent_system.py): Legacy supervisor-routed in-memory RAG implementation featuring Hybrid Search (Vector + BM25) and Cross-Encoder reranking, populated with mock DB seeds.
 *   [sanity_check.py](sanity_check.py): Verifies local connection to Ollama and loaded model states.
+*   [project_alpha_overview.pdf](project_alpha_overview.pdf): Sample PDF document containing confidential overview details for Project Alpha (used for testing vector ingestion).
 *   [requirements.txt](requirements.txt): Python dependency configurations.
 *   [.gitignore](.gitignore): Excludes cache directories and local document files.
