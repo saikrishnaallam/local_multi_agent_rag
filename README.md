@@ -122,8 +122,12 @@ streamlit run app.py
 * Drag and drop multiple PDF files in the sidebar, click **Process Documents**, and start chatting.
 
 ### 3. Run CLI Ingestion (Alternative)
-You can also index documents directly using the terminal utility:
+You can index documents directly using the terminal utility:
 ```bash
+# Ingests the default sample document (project_alpha_overview.pdf)
+python ingest.py
+
+# Or ingest any other custom PDF document
 python ingest.py path/to/document.pdf
 ```
 
@@ -135,6 +139,9 @@ python main.py
 This script runs preconfigured test cases:
 * **In-Context Query**: Asks about "Project Alpha" (expects local database retrieval ➡️ answer generation).
 * **Out-of-Context Query**: Asks about the "Super Bowl" (expects retrieval ➡️ fallback to DuckDuckGo Web Search ➡️ answer generation).
+
+> [!IMPORTANT]
+> You **must** run the CLI Ingestion (`python ingest.py`) to seed the database with the sample document *before* running `python main.py`. Otherwise, the first test case won't find the context for Project Alpha in the local database and will fall back to web search.
 
 ### 5. Run Legacy Terminal Agent System (Optional)
 If you want to run the original supervisor-routed hybrid search agent with Cross-Encoder reranking in your terminal:
