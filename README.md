@@ -70,6 +70,10 @@ We did extensive refactoring to turn a CLI script into a fully operational local
 > **Strict Grader Tool Binding**
 > Prompting local models to output simple strings often leads to unexpected parsing errors. We wrap the grader inside a Pydantic model (`RouteDecision`) and enforce structured JSON schemas via Ollama's tool binding.
 
+> [!NOTE]
+> **Cross-Encoder Model Download (Legacy Agent)**
+> The legacy agent (`agent_system.py`) utilizes the `sentence-transformers` library for reranking, which downloads the `cross-encoder/ms-marco-MiniLM-L-6-v2` model from the Hugging Face Hub on its first execution. This requires a one-time active internet connection.
+
 ---
 
 ## 🛠️ Step-by-Step Quick Start
