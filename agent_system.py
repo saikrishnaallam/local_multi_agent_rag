@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 # Add this import at the very top with your other imports
 from langgraph.graph import StateGraph, START, END
 

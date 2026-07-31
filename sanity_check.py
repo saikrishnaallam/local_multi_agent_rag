@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from langchain_ollama import ChatOllama, OllamaEmbeddings
 
 print("🔄 Connecting to local Llama3 model via Ollama...")

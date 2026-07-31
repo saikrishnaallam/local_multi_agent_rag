@@ -162,12 +162,19 @@ Since this system is built on LangGraph and LangChain, you can easily trace the 
 To enable tracing:
 1. Sign up for a free account at [smith.langchain.com](https://smith.langchain.com).
 2. Generate an API key from your profile settings.
-3. Export the following environment variables in your terminal before running the python applications:
-   ```bash
-   export LANGCHAIN_TRACING_V2="true"
-   export LANGCHAIN_API_KEY="your-api-key-here"
-   export LANGCHAIN_PROJECT="local-multi-agent-rag"
-   ```
+3. Configure the environment variables. You can do this in one of two ways:
+   * **Using a `.env` file (Recommended)**:
+     1. Copy `.env.example` to `.env`:
+        ```bash
+        cp .env.example .env
+        ```
+     2. Open `.env` and fill in your `LANGCHAIN_API_KEY`.
+   * **Using terminal export**:
+     ```bash
+     export LANGCHAIN_TRACING_V2="true"
+     export LANGCHAIN_API_KEY="your-api-key-here"
+     export LANGCHAIN_PROJECT="local-multi-agent-rag"
+     ```
 4. Run the scripts or Streamlit interface as normal. All node transitions and model calls will automatically be captured and visualized in your LangSmith dashboard!
 
 ---
@@ -181,4 +188,5 @@ To enable tracing:
 *   [sanity_check.py](sanity_check.py): Verifies local connection to Ollama and loaded model states.
 *   [project_alpha_overview.pdf](project_alpha_overview.pdf): Sample PDF document containing confidential overview details for Project Alpha (used for testing vector ingestion).
 *   [requirements.txt](requirements.txt): Python dependency configurations.
+*   [.env.example](.env.example): Template for local environment variables (e.g., optional LangSmith configuration).
 *   [.gitignore](.gitignore): Excludes cache directories and local document files.

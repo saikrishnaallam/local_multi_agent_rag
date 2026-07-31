@@ -5,3 +5,4 @@ __pycache__/
 .vscode/
 chroma_db/
 *.pdf
+.env

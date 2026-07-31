@@ -1,4 +1,7 @@
 import streamlit as st
+from dotenv import load_dotenv
+load_dotenv()
+
 import tempfile
 import os
 from main import app as compiled_graph, local_embeddings
